@@ -1,0 +1,8 @@
+service can-hal-1.0-service /vendor/bin/hw/android.hardware.automotive.can@1.0-service
+    class hal
+    capabilities NET_ADMIN
+    user vehicle_network
+    group system inet
+    interface android.hardware.automotive.can@1.0::ICanController socketcan
+    interface android.hardware.automotive.can@1.0::ICanBus can0
+    interface android.hardware.automotive.can@1.0::ICanBusIsotp can0
