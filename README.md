@@ -1,9 +1,7 @@
 # hidl-automotive-can-1.0-support-canfd-n-isotp
 An extension to AOSP automotive can 1.0 HIDL for supporting sending/receiving CANFD and ISOTP frames.
 
-Extensions are done based on Android12, but since the HIDL CAN HAL doesn't change (only can/1.0 exists) in following Android versions,
-
-this piece of code also can be applied to Android13, 14, 15, 16, etc..
+Extensions are done based on Android12, but since the HIDL CAN HAL doesn't change (only can/1.0 exists) in following Android versions, this piece of code also can be applied to Android13, 14, 15, 16, etc..
 
 If you prefer to use AIDL CAN HAL, this code might be helpful as reference.
 
