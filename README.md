@@ -40,7 +40,8 @@ Using CAN/CANFD:
                 spCanMessageListener = new CanMessageListener(*this);
             }
             CanMessageFilter canMsgFilter {
-                .id = mCanMsgIdRx,
+                .txId = mCanMsgIdTx,
+                .rxId = mCanMsgIdRx,
                 .mask = mCanMsgIdMask,
                 .exclude = mIsExcludeMatch
             };
@@ -98,15 +99,13 @@ Using ISOTP:
         auto retRegRecipientIsotp = mpCanBusIsotpService->linkToDeath(spDeathRecipient, 0);
         LOG_I("register death recipient %s", retRegRecipientIsotp.withDefault(false)? "done":"failed");
 
-        auto retSetIds = mpCanBusIsotpService->restartWithIDs(mCanMsgIdTx, mCanMsgIdRx);
-        LOG_I("restart ISOTP with IDs(tx:0x%x, rx:0x%x): %s", mCanMsgIdTx, mCanMsgIdRx, retSetIds.withDefault(Result::TRANSMISSION_FAILURE)==Result::OK? "done":"failed");
-
         if (spCanIsotpMessageHandle == nullptr) {
             if (spCanIsotpMessageListener == nullptr) {
                 spCanIsotpMessageListener = new CanIsotpMessageListener(*this);
             }
             CanMessageFilter canMsgFilter {
-                .id = mCanMsgIdRx,
+                .txId = mCanMsgIdTx,
+                .rxId = mCanMsgIdRx,
                 .mask = mCanMsgIdMask,
                 .exclude = mIsExcludeMatch
             };
