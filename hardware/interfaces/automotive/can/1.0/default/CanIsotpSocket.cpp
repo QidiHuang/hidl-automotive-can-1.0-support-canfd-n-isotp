@@ -34,7 +34,7 @@ using namespace std::chrono_literals;
  *       down the interface. */
 static constexpr auto kReadPooling = 100ms;
 
-std::unique_ptr<CanIsotpSocket> CanIsotpSocket::open(const std::string& ifname,
+std::shared_ptr<CanIsotpSocket> CanIsotpSocket::open(const std::string& ifname,
                             uint32_t rxid, uint32_t txid, ReadCallback rdcb, ErrorCallback errcb) {
     if (rxid == 0) rxid = ISOTP_RX_ID_DEFAULT;
     if (txid == 0) txid = ISOTP_TX_ID_DEFAULT;
@@ -45,11 +45,13 @@ std::unique_ptr<CanIsotpSocket> CanIsotpSocket::open(const std::string& ifname,
     }
 
     // Can't use std::make_unique due to private CanIsotpSocket constructor.
-    return std::unique_ptr<CanIsotpSocket>(new CanIsotpSocket(std::move(sock), rdcb, errcb));
+    return std::shared_ptr<CanIsotpSocket>(new CanIsotpSocket(std::move(sock), rxid, txid, rdcb, errcb));
 }
 
-CanIsotpSocket::CanIsotpSocket(base::unique_fd socket, ReadCallback rdcb, ErrorCallback errcb)
-    : mReadCallback(rdcb),
+CanIsotpSocket::CanIsotpSocket(base::unique_fd socket, uint32_t rxId, uint32_t txId, ReadCallback rdcb, ErrorCallback errcb)
+    : mRxId(rxId),
+      mTxId(txId),
+      mReadCallback(rdcb),
       mErrorCallback(errcb),
       mSocket(std::move(socket)),
       mReaderThread(&CanIsotpSocket::readerThread, this) {}
@@ -68,9 +70,13 @@ CanIsotpSocket::~CanIsotpSocket() {
 
 bool CanIsotpSocket::send(const struct canisotp_frame& frame)
 {
+    if (frame.can_id != mTxId) {
+        LOG(WARNING) << "CanIsotpSocket txId(" << mTxId << ") mismatch with frame txId(" << frame.can_id << ")";
+    }
+
     const auto res = write(mSocket.get(), frame.data, frame.len);
     if (res < 0) {
-        PLOG(WARNING) << "CanIsotpSocket send failed";
+        LOG(WARNING) << "CanIsotpSocket send failed";
         return false;
     }
     if (res != static_cast<long>(frame.len)) {
@@ -133,7 +139,7 @@ void CanIsotpSocket::readerThread() {
             break;
         }
 
-        mReadCallback(buffer.data(), nbytes, ts);
+        mReadCallback(mRxId, buffer.data(), nbytes, ts);
     }
 
     bool failed = !mStopReaderThread;

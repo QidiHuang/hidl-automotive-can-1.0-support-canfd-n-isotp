@@ -43,7 +43,7 @@ struct CanMessageListener : public V1_0::ICanMessageListener {
         int msgIdWidth = 3;
         if (message.isExtendedId) msgIdWidth = 8;
         std::cout << "  " << name << "  " << std::hex << std::uppercase << std::setw(msgIdWidth)
-                  << std::setfill('0') << message.id << std::setw(0);
+                  << std::setfill('0') << message.rxId << std::setw(0);
         std::cout << "   [" << message.payload.size() << "] ";
         if (message.remoteTransmissionRequest) {
             std::cout << "remote request";

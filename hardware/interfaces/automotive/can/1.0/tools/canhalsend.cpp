@@ -82,7 +82,7 @@ static std::optional<V1_0::CanMessage> parseCanMessage(const std::string& msg) {
     if (!android::base::ParseUint("0x" + msgidStr, &msgid)) return std::nullopt;
 
     V1_0::CanMessage canmsg = {};
-    canmsg.id = msgid;
+    canmsg.txId = msgid;
     if (msgid > 0x7FF) {
         canmsg.isExtendedId = true;
     }

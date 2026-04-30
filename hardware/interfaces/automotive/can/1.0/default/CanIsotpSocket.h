@@ -43,7 +43,7 @@ struct canisotp_frame {
 };
 
 struct CanIsotpSocket {
-    using ReadCallback = std::function<void(const uint8_t *buffer, uint32_t len, std::chrono::nanoseconds)>;
+    using ReadCallback = std::function<void(const uint32_t rxId, const uint8_t *buffer, uint32_t len, std::chrono::nanoseconds)>;
     using ErrorCallback = std::function<void(int errnoVal)>;
 
     /**
@@ -54,7 +54,7 @@ struct CanIsotpSocket {
      * \param errcb Callback on socket failure
      * \return Socket instance, or nullptr if it wasn't possible to open one
      */
-    static std::unique_ptr<CanIsotpSocket> open(const std::string& ifname,
+    static std::shared_ptr<CanIsotpSocket> open(const std::string& ifname,
                                     uint32_t rxid, uint32_t txid, ReadCallback rdcb, ErrorCallback errcb);
     virtual ~CanIsotpSocket();
 
@@ -67,9 +67,11 @@ struct CanIsotpSocket {
     bool send(const struct canisotp_frame& frame);
 
   private:
-    CanIsotpSocket(base::unique_fd socket, ReadCallback rdcb, ErrorCallback errcb);
+    CanIsotpSocket(base::unique_fd socket, uint32_t rxId, uint32_t txId, ReadCallback rdcb, ErrorCallback errcb);
     void readerThread();
 
+    uint32_t mRxId{0x00000000};
+    uint32_t mTxId{0x00000000};
     ReadCallback mReadCallback;
     ErrorCallback mErrorCallback;
 

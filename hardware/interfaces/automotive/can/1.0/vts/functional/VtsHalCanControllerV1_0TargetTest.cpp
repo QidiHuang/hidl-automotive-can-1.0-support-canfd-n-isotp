@@ -139,14 +139,14 @@ TEST_P(CanControllerHalTest, BringUpDown) {
     if (!up(InterfaceType::VIRTUAL, name, "vcan57", ICanController::Result::OK)) GTEST_SKIP();
     assertRegistered(name, true);
 
-    const auto dnresult = mCanController->downInterface(name);
+    const auto dnresult = mCanController->downInterface(name, false);
     ASSERT_TRUE(dnresult);
 
     assertRegistered(name, false);
 }
 
 TEST_P(CanControllerHalTest, DownFake) {
-    const auto result = mCanController->downInterface("imnotup");
+    const auto result = mCanController->downInterface("imnotup", false);
     ASSERT_FALSE(result);
 }
 
@@ -161,7 +161,7 @@ TEST_P(CanControllerHalTest, UpTwice) {
     }
     assertRegistered(name, true);
 
-    const auto result = mCanController->downInterface(name);
+    const auto result = mCanController->downInterface(name, false);
     ASSERT_TRUE(result);
     assertRegistered(name, false);
 }
@@ -221,7 +221,7 @@ TEST_P(CanControllerHalTest, ConfigCompatibility) {
         ASSERT_NE(ICanController::Result::NOT_SUPPORTED, upresult);
 
         if (upresult == ICanController::Result::OK) {
-            const auto dnresult = mCanController->downInterface(config.name);
+            const auto dnresult = mCanController->downInterface(config.name, false);
             ASSERT_TRUE(dnresult);
             continue;
         }

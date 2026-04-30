@@ -74,7 +74,7 @@ sp<ICloseHandle> CanBusHalTest::listenForErrors(const sp<ICanErrorListener>& lis
 
 TEST_P(CanBusHalTest, SendNoPayload) {
     CanMessage msg = {};
-    msg.id = 0x123;
+    msg.txId = 0x123;
     ASSERT_NE(mCanBus, nullptr);
     const auto result = mCanBus->send(msg);
     ASSERT_EQ(Result::OK, result);
@@ -82,7 +82,7 @@ TEST_P(CanBusHalTest, SendNoPayload) {
 
 TEST_P(CanBusHalTest, Send8B) {
     CanMessage msg = {};
-    msg.id = 0x234;
+    msg.txId = 0x234;
     msg.payload = {1, 2, 3, 4, 5, 6, 7, 8};
 
     const auto result = mCanBus->send(msg);
@@ -99,7 +99,7 @@ TEST_P(CanBusHalTest, SendZeroId) {
 
 TEST_P(CanBusHalTest, SendTooLong) {
     CanMessage msg = {};
-    msg.id = 0x123;
+    msg.txId = 0x123;
     msg.payload = hidl_vec<uint8_t>(102400);  // 100kiB
 
     const auto result = mCanBus->send(msg);
@@ -115,9 +115,9 @@ TEST_P(CanBusHalTest, ListenNoFilter) {
 
 TEST_P(CanBusHalTest, ListenSomeFilter) {
     hidl_vec<CanMessageFilter> filters = {
-            {0x123, 0x1FF, FilterFlag::DONT_CARE, FilterFlag::DONT_CARE, false},
-            {0x001, 0x00F, FilterFlag::DONT_CARE, FilterFlag::DONT_CARE, true},
-            {0x200, 0x100, FilterFlag::DONT_CARE, FilterFlag::DONT_CARE, false},
+            {0x00,  0x123, 0x1FF, FilterFlag::DONT_CARE, FilterFlag::DONT_CARE, false},
+            {0x00,  0x001, 0x00F, FilterFlag::DONT_CARE, FilterFlag::DONT_CARE, true},
+            {0x00,  0x200, 0x100, FilterFlag::DONT_CARE, FilterFlag::DONT_CARE, false},
     };
 
     const auto [result, closeHandle] = listen(filters, new CanMessageListener());

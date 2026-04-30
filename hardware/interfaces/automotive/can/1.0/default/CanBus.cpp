@@ -44,7 +44,7 @@ Return<Result> CanBus::send(const CanMessage& message) {
     if (message.payload.size() > CANFD_MAX_DLEN) return Result::PAYLOAD_TOO_LONG;
 
     struct canfd_frame frame = {};
-    frame.can_id = message.id;
+    frame.can_id = message.txId;
     if (message.isExtendedId) frame.can_id |= CAN_EFF_FLAG;
     if (message.remoteTransmissionRequest) frame.can_id |= CAN_RTR_FLAG;
     frame.len = message.payload.size();
@@ -84,7 +84,7 @@ Return<void> CanBus::listen(const hidl_vec<CanMessageFilter>& filter,
 
     // fix message IDs to have all zeros on bits not covered by mask
     std::for_each(listener.filter.begin(), listener.filter.end(),
-                  [](auto& rule) { rule.id &= rule.mask; });
+                  [](auto& rule) { rule.rxId &= rule.mask; });
 
     _hidl_cb(Result::OK, closeHandle);
     return {};
@@ -258,7 +258,7 @@ static bool match(const hidl_vec<CanMessageFilter>& filter, CanMessageId id, boo
     bool anyNonExcludeRulePresent = false;
     bool anyNonExcludeRuleSatisfied = false;
     for (auto& rule : filter) {
-        const bool satisfied = ((id & rule.mask) == rule.id) &&
+        const bool satisfied = ((id & rule.mask) == rule.rxId) &&
                                satisfiesFilterFlag(rule.rtr, isRtr) &&
                                satisfiesFilterFlag(rule.extendedFormat, isExtendedId);
 
@@ -315,7 +315,7 @@ void CanBus::onRead(const struct canfd_frame& frame, std::chrono::nanoseconds ti
     }
 
     CanMessage message = {};
-    message.id = frame.can_id & CAN_EFF_MASK;  // mask out eff/rtr/err flags
+    message.rxId = frame.can_id & CAN_EFF_MASK;  // mask out eff/rtr/err flags
     message.payload = hidl_vec<uint8_t>(frame.data, frame.data + frame.len);
     message.timestamp = timestamp.count();
     message.isExtendedId = (frame.can_id & CAN_EFF_FLAG) != 0;
@@ -328,7 +328,7 @@ void CanBus::onRead(const struct canfd_frame& frame, std::chrono::nanoseconds ti
     std::lock_guard<std::mutex> lck(mMsgListenersGuard);
     for (auto& listener : mMsgListeners) {
         LOG(INFO) << "Checking listener(0x" << std::hex << listener.callback.get() << std::dec << ")...";
-        if (!match(listener.filter, message.id, message.remoteTransmissionRequest,
+        if (!match(listener.filter, message.rxId, message.remoteTransmissionRequest,
                    message.isExtendedId))
             continue;
         LOG(INFO) << "notifying data to listener(0x" << std::hex << listener.callback.get() << std::dec << ")...";

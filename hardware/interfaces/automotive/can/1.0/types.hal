@@ -30,7 +30,10 @@ typedef uint32_t CanMessageId;
  * CAN message being sent or received.
  */
 struct CanMessage {
-    CanMessageId id;
+    /* transmit ID */
+    CanMessageId txId;
+    /* receive ID */
+    CanMessageId rxId;
 
     /**
      * CAN message payload, as defined in CAN 1.x and CAN 2.x standards.
@@ -81,7 +84,10 @@ struct CanMessage {
  *  - a single non-matching excluded filter makes the whole set non-matching.
  */
 struct CanMessageFilter {
-    CanMessageId id;
+    /* transmit ID */
+    CanMessageId txId;
+    /* receive ID */
+    CanMessageId rxId;
     uint32_t mask;
     /** Remote Transmission Request; another ECU requests <DLC> bytes of data on this message ID */
     FilterFlag rtr;

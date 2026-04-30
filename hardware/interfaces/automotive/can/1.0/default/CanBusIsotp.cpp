@@ -46,16 +46,73 @@ Return<Result> CanBusIsotp::send(const CanMessage& message) {
     }
 
     struct canisotp_frame frame = {};
-    frame.can_id = message.id;
+    frame.can_id = message.txId;
     if (message.isExtendedId) frame.can_id |= CAN_EFF_FLAG;
     if (message.remoteTransmissionRequest) frame.can_id |= CAN_RTR_FLAG;
     frame.len = message.payload.size();
     frame.flags |= CANFD_BRS;
     memcpy(frame.data, message.payload.data(), message.payload.size());
 
-    if (!mIsotpSocket->send(frame)) return Result::TRANSMISSION_FAILURE;
+    auto spSocket = findSocketByTxId(message.txId);
+    if (spSocket == nullptr) {
+        auto info = createSocket(message.txId, message.rxId);
+        if (info.socket == nullptr) {
+            LOG(ERROR) << "Failed open socket";
+            return Result::TRANSMISSION_FAILURE;
+        }
+        cacheSocket(info);
+        spSocket = info.socket;
+    }
+    if (!spSocket->send(frame)) return Result::TRANSMISSION_FAILURE;
 
     return Result::OK;
+}
+
+SocketInfo CanBusIsotp::createSocket(uint32_t txId, uint32_t rxId)
+{
+    using namespace std::placeholders;
+    CanIsotpSocket::ReadCallback rdcb = std::bind(&CanBusIsotp::onReadIsotp, this, _1, _2, _3, _4);
+    CanIsotpSocket::ErrorCallback errcb = std::bind(&CanBusIsotp::onError, this, _1);
+    SocketInfo info;
+    info.txId = txId;
+    info.rxId = rxId;
+    info.socket = CanIsotpSocket::open(mIfname, rxId, txId, rdcb, errcb);
+    return info;
+}
+
+std::shared_ptr<CanIsotpSocket> CanBusIsotp::findSocketByTxId(uint32_t canMsgTxId)
+{
+    std::lock_guard<std::mutex> lck(mSocketInfoMutex);
+    for (auto& info : mSocketInfo) {
+        if (info.txId == canMsgTxId) return info.socket;
+    }
+
+    LOG(WARNING) << "socket not found for: txId(" << canMsgTxId << ")";
+    return nullptr;
+}
+std::shared_ptr<CanIsotpSocket> CanBusIsotp::findSocketByRxId(uint32_t canMsgRxId)
+{
+    std::lock_guard<std::mutex> lck(mSocketInfoMutex);
+    for (auto& info : mSocketInfo) {
+        if (info.rxId == canMsgRxId) return info.socket;
+    }
+
+    LOG(WARNING) << "socket not found for: rxId(" << canMsgRxId << ")";
+    return nullptr;
+}
+void CanBusIsotp::cacheSocket(SocketInfo& socketInfo)
+{
+    if (findSocketByTxId(socketInfo.txId)) {
+        //LOG(WARNING) << "socket alread exist";
+        return;
+    }
+    if (findSocketByRxId(socketInfo.rxId)) {
+        //LOG(WARNING) << "socket alread exist";
+        return;
+    }
+
+    std::lock_guard<std::mutex> lck(mSocketInfoMutex);
+    mSocketInfo.push_back(socketInfo);
 }
 
 Return<void> CanBusIsotp::listen(const hidl_vec<CanMessageFilter>& filter,
@@ -72,6 +129,17 @@ Return<void> CanBusIsotp::listen(const hidl_vec<CanMessageFilter>& filter,
         return {};
     }
 
+    for (auto& flt : filter) {
+        if (!findSocketByRxId(flt.rxId)) {
+            auto info = createSocket(flt.txId, flt.rxId);
+            if (info.socket == nullptr) {
+                LOG(ERROR) << "Failed open socket";
+                return {};
+            }
+            cacheSocket(info);
+        }
+    }
+
     std::lock_guard<std::mutex> lckListeners(mMsgListenersGuard);
 
     sp<CloseHandle> closeHandle = new CloseHandle([this, listenerCb]() {
@@ -84,7 +152,7 @@ Return<void> CanBusIsotp::listen(const hidl_vec<CanMessageFilter>& filter,
 
     // fix message IDs to have all zeros on bits not covered by mask
     std::for_each(listener.filter.begin(), listener.filter.end(),
-                  [](auto& rule) { rule.id &= rule.mask; });
+                  [](auto& rule) { rule.rxId &= rule.mask; });
 
     _hidl_cb(Result::OK, closeHandle);
     return {};
@@ -148,7 +216,7 @@ ICanController::Result CanBusIsotp::up() {
         return ICanController::Result::INVALID_STATE;
     }
 
-    const auto preResult = preUp();
+    const auto preResult = preUp();  // set bitrates
     if (preResult != ICanController::Result::OK) return preResult;
 
     const auto isUp = netdevice::isUp(mIfname);
@@ -163,15 +231,6 @@ ICanController::Result CanBusIsotp::up() {
         return ICanController::Result::UNKNOWN_ERROR;
     }
     mDownAfterUse = !*isUp;
-
-    using namespace std::placeholders;
-    CanIsotpSocket::ReadCallback rdcb = std::bind(&CanBusIsotp::onReadIsotp, this, _1, _2, _3);
-    CanIsotpSocket::ErrorCallback errcb = std::bind(&CanBusIsotp::onError, this, _1);
-    mIsotpSocket = CanIsotpSocket::open(mIfname, mRxId, mTxId, rdcb, errcb);
-    if (!mIsotpSocket) {
-        if (mDownAfterUse) netdevice::down(mIfname);
-        return ICanController::Result::UNKNOWN_ERROR;
-    }
 
     mIsUp = true;
     return ICanController::Result::OK;
@@ -231,6 +290,7 @@ Return<Result> CanBusIsotp::restartWithIDs(const uint32_t txid, const uint32_t r
     mTxId = txid; mRxId = rxid;
 
     LOG(DEBUG) << "restarting CAN ISO-TP interface with new CAN IDs: txid=0x" << std::hex << mTxId << ", rxid=0x" << mRxId;
+    /*
 #if 0
     auto ret = ICanController::Result::UNKNOWN_ERROR;
     if (down()) {  // will clear all listeners, so client must re-register them
@@ -247,6 +307,7 @@ Return<Result> CanBusIsotp::restartWithIDs(const uint32_t txid, const uint32_t r
         if (mDownAfterUse) netdevice::down(mIfname);
         return Result::INTERFACE_DOWN;
     }
+    */
 
     return Result::OK;
 }
@@ -262,7 +323,9 @@ bool CanBusIsotp::down() {
 
     clearMsgListeners();
     clearErrListeners();
-    mIsotpSocket.reset();
+
+    std::lock_guard<std::mutex> mapLock(mSocketInfoMutex);
+    mSocketInfo.clear();
 
     bool success = true;
 
@@ -308,7 +371,7 @@ static bool match(const hidl_vec<CanMessageFilter>& filter, CanMessageId id, boo
     bool anyNonExcludeRulePresent = false;
     bool anyNonExcludeRuleSatisfied = false;
     for (auto& rule : filter) {
-        const bool satisfied = ((id & rule.mask) == rule.id) &&
+        const bool satisfied = ((id & rule.mask) == rule.rxId) &&
                                satisfiesFilterFlag(rule.rtr, isRtr) &&
                                satisfiesFilterFlag(rule.extendedFormat, isExtendedId);
 
@@ -356,10 +419,10 @@ static ErrorEvent parseErrorFrame(const struct canfd_frame& frame) {
     return ErrorEvent::UNKNOWN_ERROR;
 }
 
-void CanBusIsotp::onReadIsotp(const uint8_t *buffer, uint32_t len, std::chrono::nanoseconds timestamp)
+void CanBusIsotp::onReadIsotp(const uint32_t rxId, const uint8_t *buffer, uint32_t len, std::chrono::nanoseconds timestamp)
 {
     CanMessage message = {};
-    message.id = (mRxId==0? ISOTP_RX_ID_DEFAULT: mRxId);
+    message.rxId = (rxId==0? mRxId: rxId);
     message.payload = hidl_vec<uint8_t>(buffer, buffer + len);
     message.timestamp = timestamp.count();
     message.isExtendedId = false;
@@ -371,7 +434,7 @@ void CanBusIsotp::onReadIsotp(const uint8_t *buffer, uint32_t len, std::chrono::
 
     std::lock_guard<std::mutex> lck(mMsgListenersGuard);
     for (auto& listener : mMsgListeners) {
-        if (!match(listener.filter, message.id, message.remoteTransmissionRequest,
+        if (!match(listener.filter, message.rxId, message.remoteTransmissionRequest,
                    message.isExtendedId))
             continue;
         if (!listener.callback->onReceive(message).isOk() && !listener.failedOnce) {

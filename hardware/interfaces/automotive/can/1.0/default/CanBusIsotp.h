@@ -28,6 +28,12 @@
 
 namespace android::hardware::automotive::can::V1_0::implementation {
 
+typedef struct {
+    uint32_t txId;
+    uint32_t rxId;
+    std::shared_ptr<CanIsotpSocket> socket;
+} SocketInfo;
+
 struct CanBusIsotp : public ICanBusIsotp {
     using ErrorCallback = std::function<void()>;
 
@@ -76,6 +82,11 @@ struct CanBusIsotp : public ICanBusIsotp {
     std::string mIfname;
 
   private:
+    SocketInfo createSocket(uint32_t txId, uint32_t rxId);
+    std::shared_ptr<CanIsotpSocket> findSocketByTxId(uint32_t canMsgTxId);
+    std::shared_ptr<CanIsotpSocket> findSocketByRxId(uint32_t canMsgTxId);
+    void cacheSocket(SocketInfo& spSocket);
+
     struct CanMessageListener {
         sp<ICanMessageListener> callback;
         hidl_vec<CanMessageFilter> filter;
@@ -87,7 +98,7 @@ struct CanBusIsotp : public ICanBusIsotp {
 
     void notifyErrorListeners(ErrorEvent err, bool isFatal);
 
-    void onReadIsotp(const uint8_t *buffer, uint32_t len, std::chrono::nanoseconds timestamp);
+    void onReadIsotp(const uint32_t rxId, const uint8_t *buffer, uint32_t len, std::chrono::nanoseconds timestamp);
     void onError(int errnoVal);
 
     std::mutex mMsgListenersGuard;
@@ -96,7 +107,9 @@ struct CanBusIsotp : public ICanBusIsotp {
     std::mutex mErrListenersGuard;
     std::vector<sp<ICanErrorListener>> mErrListeners GUARDED_BY(mErrListenersGuard);
 
-    std::unique_ptr<CanIsotpSocket> mIsotpSocket;
+    //std::unique_ptr<CanIsotpSocket> mIsotpSocket;
+    std::vector<SocketInfo> mSocketInfo;
+    std::mutex mSocketInfoMutex;
     bool mDownAfterUse;
 
     /**
